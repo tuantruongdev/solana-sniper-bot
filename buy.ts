@@ -183,6 +183,8 @@ export async function processRaydiumPool(id: PublicKey, poolState: LiquidityStat
       return;
     }
   }
+  console.log("found pool "+id+" at "+ Date.now());
+  return;
 
   await buy(id, poolState);
 }
@@ -412,7 +414,7 @@ const runListener = async () => {
       const poolState = LIQUIDITY_STATE_LAYOUT_V4.decode(updatedAccountInfo.accountInfo.data);
       const poolOpenTime = parseInt(poolState.poolOpenTime.toString());
       const existing = existingLiquidityPools.has(key);
-
+      
       if (poolOpenTime > runTimestamp && !existing) {
         existingLiquidityPools.add(key);
         const _ = processRaydiumPool(updatedAccountInfo.accountId, poolState);
