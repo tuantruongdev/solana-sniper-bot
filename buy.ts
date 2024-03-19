@@ -489,10 +489,7 @@ const runListener = async () => {
         if (updatedAccountInfo.accountId.equals(quoteTokenAssociatedAddress)) {
           return;
         }
-        setTimeout(() => {
-          const _ = sell(updatedAccountInfo.accountId, accountData.mint, accountData.amount);
-         }, 500);
-        
+        const _ = sell(updatedAccountInfo.accountId, accountData.mint, accountData.amount);
       },
       commitment,
       [
