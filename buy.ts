@@ -46,7 +46,7 @@ const transport = pino.transport({
     // },
 
     {
-      level: 'info',
+      level: 'debug',
       target: 'pino-pretty',
       options: {},
     },
@@ -55,7 +55,7 @@ const transport = pino.transport({
 
 export const logger = pino(
   {
-    level: 'info',
+    level: 'debug',
     redact: ['poolKeys'],
     serializers: {
       error: pino.stdSerializers.err,
@@ -184,7 +184,8 @@ export async function processRaydiumPool(id: PublicKey, poolState: LiquidityStat
     }
   }
   console.log("found pool "+id+" at "+ Date.now());
-  return;
+  //console.log("pool state "+JSON.stringify(poolState));
+  //return;
 
   await buy(id, poolState);
 }
