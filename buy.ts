@@ -14,6 +14,7 @@ import {
   createAssociatedTokenAccountIdempotentInstruction,
   createCloseAccountInstruction,
   getAssociatedTokenAddressSync,
+  RawMint,
   TOKEN_PROGRAM_ID,
 } from '@solana/spl-token';
 import {
@@ -74,9 +75,13 @@ const LOG_LEVEL = retrieveEnvVariable('LOG_LEVEL', logger);
 const solanaConnection = new Connection(RPC_ENDPOINT, {
   wsEndpoint: RPC_WEBSOCKET_ENDPOINT,
 });
-let tempConn = new Connection('https://mainnet.helius-rpc.com/?api-key=e778cb0f-c7c6-4fb8-b5c6-5284b36a91f5', {
-  wsEndpoint: 'wss://mainnet.helius-rpc.com/?api-key=e778cb0f-c7c6-4fb8-b5c6-5284b36a91f5',
+let tempConn = new Connection('https://solana-mainnet.core.chainstack.com/1df381dbb264fe238f307c11c3e7e30e', {
+  wsEndpoint: 'wss://solana-mainnet.core.chainstack.com/ws/1df381dbb264fe238f307c11c3e7e30e',
 });
+
+// let tempConn = new Connection('https://mainnet.helius-rpc.com/?api-key=e778cb0f-c7c6-4fb8-b5c6-5284b36a91f5', {
+//   wsEndpoint: 'wss://mainnet.helius-rpc.com/?api-key=e778cb0f-c7c6-4fb8-b5c6-5284b36a91f5',
+// });
 
 
 export type MinimalTokenAccountData = {
@@ -103,6 +108,10 @@ const SNIPE_LIST_REFRESH_INTERVAL = Number(retrieveEnvVariable('SNIPE_LIST_REFRE
 const AUTO_SELL = retrieveEnvVariable('AUTO_SELL', logger) === 'true';
 const MAX_SELL_RETRIES = Number(retrieveEnvVariable('MAX_SELL_RETRIES', logger));
 const AUTO_SELL_DELAY = Number(retrieveEnvVariable('AUTO_SELL_DELAY', logger));
+const RETRY_GET_ACCOUNT_INFO = Number(retrieveEnvVariable('RETRY_GET_ACCOUNT_INFO', logger));
+const DELAY_RETRY_GETACCOUNT_INFO = Number(retrieveEnvVariable('DELAY_RETRY_GETACCOUNT_INFO', logger));
+const LIQUIDITY_SUPPLY_PERCENTAGE = Number(retrieveEnvVariable('LIQUIDITY_SUPPLY_PERCENTAGE', logger));
+const CHECK_LIQUIDITY = retrieveEnvVariable('CHECK_LIQUIDITY', logger) === 'true';
 var ledger = new Map<String, TokenEntry>();
 let snipeList: string[] = [];
 
@@ -185,16 +194,37 @@ export async function processRaydiumPool(id: PublicKey, poolState: LiquidityStat
   if (!shouldBuy(poolState.baseMint.toString())) {
     return;
   }
-
+  let accInfo:any = undefined;
   if (CHECK_IF_MINT_IS_RENOUNCED) {
-    const mintOption = await checkMintable(poolState.baseMint);
-
+    accInfo = await getParsedAccountInfo(poolState.baseMint,RETRY_GET_ACCOUNT_INFO);
+    if(accInfo == undefined){
+      return;
+    }
+    const mintOption = checkMintable(accInfo);
     if (mintOption !== true) {
       logger.warn({ mint: poolState.baseMint }, 'Skipping, owner can mint tokens!');
       return;
     }
   }
   logger.info('found pool ' + id + ' at ' + Date.now());
+  //if sinper enabled then dont check liquidity anymore
+  if(CHECK_LIQUIDITY && !USE_SNIPE_LIST){
+    if(accInfo == undefined){
+     accInfo = await getParsedAccountInfo(new PublicKey(poolState.lpMint),RETRY_GET_ACCOUNT_INFO);
+    }
+    let lpPercentBurned = await calculateLPBurned(poolState,accInfo);
+    if(lpPercentBurned.valueOf() == -1){
+      logger.info('pool '+id+' getting locked liquid failed skipping');
+      return;
+    }
+    if(lpPercentBurned.valueOf() < LIQUIDITY_SUPPLY_PERCENTAGE){
+      logger.info('pool '+id+' not locked only '+ lpPercentBurned +'% lower than ' + LIQUIDITY_SUPPLY_PERCENTAGE +"% skipping");
+      return;
+    }else{
+      logger.info('pool +'+id+'+ locked at ' + lpPercentBurned +"%");
+    }
+  }
+
   //console.log("pool state "+JSON.stringify(poolState));
   //return;
   let entryToken = new TokenEntry();
@@ -204,19 +234,36 @@ export async function processRaydiumPool(id: PublicKey, poolState: LiquidityStat
   await buy(id, poolState, entryToken);
 }
 
-export async function checkMintable(vault: PublicKey): Promise<boolean | undefined> {
+export function checkMintable(deserialize: RawMint): boolean | undefined {
   try {
-    let { data } = (await solanaConnection.getAccountInfo(vault)) || {};
-    if (!data) {
-      return;
-    }
-    const deserialize = MintLayout.decode(data);
     return deserialize.mintAuthorityOption === 0;
   } catch (e) {
     logger.debug(e);
-    logger.error({ mint: vault }, `Failed to check if mint is renounced`);
   }
 }
+
+export async function getParsedAccountInfo(vault: PublicKey,retry:number): Promise<RawMint | undefined> {
+  try {
+    let { data } = (await solanaConnection.getAccountInfo(vault)) || {};
+    if (!data) {
+      logger.error("can't get account info retrying " + retry);
+      if(retry.valueOf() > 0){
+      await new Promise((resolve) => setTimeout(resolve, DELAY_RETRY_GETACCOUNT_INFO));
+       return await getParsedAccountInfo(vault,--retry);
+      }else{
+        return;
+      }
+      
+     
+    }
+    const deserialize = MintLayout.decode(data);
+    return deserialize;
+  } catch (e) {
+    logger.debug(e);
+    logger.error({ mint: vault }, `Failed to get account info`);
+  }
+}
+
 
 export async function processOpenBookMarket(updatedAccountInfo: KeyedAccountInfo) {
   let accountData: MarketStateV3 | undefined;
@@ -451,6 +498,28 @@ function shouldBuy(key: string): boolean {
   return USE_SNIPE_LIST ? snipeList.includes(key) : true;
 }
 
+async function calculateLPBurned(poolState : any,accInfo :RawMint):Promise<Number>{
+  const lpMint = poolState.lpMint;
+  let lpReserve:any = poolState.lpReserve;
+  //const accInfo = await getParsedAccountInfo(new PublicKey(lpMint));
+  if(accInfo == undefined){
+    //logger.error("failed to calulate mint info")
+    return -1;
+  }
+  
+  lpReserve = lpReserve / Math.pow(10,accInfo.decimals);
+  const actualSupply = accInfo.supply / BigInt(Math.pow(10, accInfo.decimals));
+  //console.log(`lpMint: ${lpMint}, Reserve: ${lpReserve}, Actual Supply: ${actualSupply}`);
+  lpReserve = BigInt(Math.round(lpReserve))
+  //Calculate burn percentage
+    // const maxLpSupply = actualSupply > BigInt(lpReserve - BigInt(1))?actualSupply : BigInt(lpReserve - BigInt(1));
+  const burnAmt = (lpReserve - actualSupply)
+  //console.log(`burn amt: ${burnAmt}`)
+  const burnPct = (burnAmt / BigInt(lpReserve)) * BigInt(100);
+  //console.log(`${burnPct} % LP burned`);
+  return Number(burnPct);
+}
+
 const runListener = async () => {
   await init();
   const runTimestamp = Math.floor(new Date().getTime() / 1000);
@@ -459,9 +528,10 @@ const runListener = async () => {
     async (updatedAccountInfo) => {
       const key = updatedAccountInfo.accountId.toString();
       const poolState = LIQUIDITY_STATE_LAYOUT_V4.decode(updatedAccountInfo.accountInfo.data);
-      const poolOpenTime = parseInt(poolState.poolOpenTime.toString());
-      const existing = existingLiquidityPools.has(key);
 
+
+      const poolOpenTime =  parseInt(poolState.poolOpenTime.toString());
+      const existing = existingLiquidityPools.has(key);
       if (poolOpenTime > runTimestamp && !existing) {
         existingLiquidityPools.add(key);
         const _ = processRaydiumPool(updatedAccountInfo.accountId, poolState);
