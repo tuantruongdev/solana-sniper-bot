@@ -137,8 +137,6 @@ async function init(): Promise<void> {
     `Script will buy all new tokens using ${QUOTE_MINT}. Amount that will be used to buy each token is: ${quoteAmount.toFixed().toString()}`,
   );
 
-  console.log("1");
-  
   // check existing wallet for associated token account of quote mint
   const tokenAccounts = await getTokenAccounts(solanaConnection, wallet.publicKey, commitment);
 
@@ -148,14 +146,13 @@ async function init(): Promise<void> {
       address: ta.pubkey,
     });
   }
-  console.log("2");
 
   const tokenAccount = tokenAccounts.find((acc) => acc.accountInfo.mint.toString() === quoteToken.mint.toString())!;
 
   if (!tokenAccount) {
     throw new Error(`No ${quoteToken.symbol} token account found in wallet: ${wallet.publicKey}`);
   }
-  console.log("3");
+
   quoteTokenAssociatedAddress = tokenAccount.pubkey;
 
   // load tokens to snipe
@@ -424,7 +421,6 @@ function shouldBuy(key: string): boolean {
 const runListener = async () => {
   await init();
   const runTimestamp = Math.floor(new Date().getTime() / 1000);
-  console.log("5");
   const raydiumSubscriptionId = solanaConnection.onProgramAccountChange(
     RAYDIUM_LIQUIDITY_PROGRAM_ID_V4,
     async (updatedAccountInfo) => {
@@ -461,7 +457,7 @@ const runListener = async () => {
       },
     ],
   );
-  console.log("6");
+
   const openBookSubscriptionId = solanaConnection.onProgramAccountChange(
     OPENBOOK_PROGRAM_ID,
     async (updatedAccountInfo) => {
@@ -493,7 +489,7 @@ const runListener = async () => {
         if (updatedAccountInfo.accountId.equals(quoteTokenAssociatedAddress)) {
           return;
         }
-        const _ = sell(updatedAccountInfo.accountId, accountData.mint, accountData.amount);
+          const _ = sell(updatedAccountInfo.accountId, accountData.mint, accountData.amount);
       },
       commitment,
       [
