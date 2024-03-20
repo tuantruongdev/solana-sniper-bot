@@ -1,3 +1,4 @@
+import { BigNumberish } from '@raydium-io/raydium-sdk';
 import {
   Keypair,
   Connection,
@@ -11,21 +12,20 @@ import {
 
 export class TokenEntry {
   public baseMint: PublicKey = new PublicKey('DqVm2EsirBypP9CJBFDviCFRxCM4meeBvWHzp6a6Eo1i');
-  public pool: PublicKey = new PublicKey('DqVm2EsirBypP9CJBFDviCFRxCM4meeBvWHzp6a6Eo1i');
-  public timeFound: Number = 0;
-  public timeSendBuyTx: Number = 0;
-  public timeSentBuyTx: Number = 0;
-  public timeAcceptBuyTx: Number = 0;
-  public timeSendSellTx: Number = 0;
-  public timeSentSellTx: Number = 0;
-  public timeAcceptSellTx: Number = 0;
-  public retrySellTimes: Number = 0;
-  public buyTx: String = '';
-  public sellTx: String = '';
-  public buySolAmmount: Number = 0;
-  public sellSolAmmount: Number = 0;
-  public tokenAmmount: Number = 0;
-  public totalTimeBuy: Number = 0;
-  public totalTimeSell: Number = 0;
-  public errorCode: Number = 0;
+  public timeFound: number = 0;
+  public timeSendBuyTx: number = 0;
+  public timeSentBuyTx: number = 0;
+  public timeAcceptBuyTx: number = 0;
+  public timeSendSellTx: number = 0;
+  public timeSentSellTx: number = 0;
+  public timeAcceptSellTx: number = 0;
+  public retrySellTimes: number = 0;
+  public buyTx: string = '';
+  public sellTx: string = '';
+  public buySolAmmount: string = "";
+  public sellSolAmmount: number = 0;
+  public tokenAmmount: string = "0";
+  public totalTimeBuy: number = 0;
+  public totalTimeSell: number = 0;
+  public errorCode: number = 0;
 }

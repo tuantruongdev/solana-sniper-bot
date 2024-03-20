@@ -31,7 +31,7 @@ import { retrieveEnvVariable } from './utils';
 import { getMinimalMarketV3, MinimalMarketLayoutV3 } from './market';
 import { MintLayout } from './types';
 import { TokenEntry } from './entry';
-import pino from 'pino';
+import pino, { P } from 'pino';
 import bs58 from 'bs58';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -94,6 +94,7 @@ let commitment: Commitment = retrieveEnvVariable('COMMITMENT_LEVEL', logger) as 
 
 const CHECK_IF_MINT_IS_RENOUNCED = retrieveEnvVariable('CHECK_IF_MINT_IS_RENOUNCED', logger) === 'true';
 const USE_SNIPE_LIST = retrieveEnvVariable('USE_SNIPE_LIST', logger) === 'true';
+const AUTO_SAVE_LOG = retrieveEnvVariable('AUTO_SAVE_LOG', logger) === 'true';
 const SNIPE_LIST_REFRESH_INTERVAL = Number(retrieveEnvVariable('SNIPE_LIST_REFRESH_INTERVAL', logger));
 const AUTO_SELL = retrieveEnvVariable('AUTO_SELL', logger) === 'true';
 const MAX_SELL_RETRIES = Number(retrieveEnvVariable('MAX_SELL_RETRIES', logger));
@@ -304,23 +305,29 @@ async function buy(accountId: PublicKey, accountData: LiquidityStateV4, entryTok
         },
         `Confirmed buy tx`,
       );
-      entryToken.timeAcceptSellTx = Date.now();
+      entryToken.buyTx = `https://solscan.io/tx/${signature}?cluster=${network}`;
+      entryToken.buySolAmmount = quoteAmount.toExact();
+      entryToken.timeAcceptBuyTx = Date.now();
+      entryToken.totalTimeBuy= entryToken.timeAcceptBuyTx - entryToken.timeFound;
     } else {
       logger.debug(confirmation.value.err);
       logger.info({ mint: accountData.baseMint, signature }, `Error confirming buy tx`);
-      entryToken.timeAcceptSellTx = -1;
+      entryToken.errorCode = -1;
     }
   } catch (e) {
     logger.debug(e);
     logger.error({ mint: accountData.baseMint }, `Failed to buy token`);
-    entryToken.timeAcceptSellTx = -2;
+    entryToken.errorCode = -2;
   }
 }
 
 async function sell(accountId: PublicKey, mint: PublicKey, amount: BigNumberish): Promise<void> {
   let sold = false;
   let retries = 0;
-
+  let entryToken = ledger.get(mint.toBase58());
+  if(entryToken == undefined){
+    return;
+  }
   if (AUTO_SELL_DELAY > 0) {
     await new Promise((resolve) => setTimeout(resolve, AUTO_SELL_DELAY));
   }
@@ -377,9 +384,12 @@ async function sell(accountId: PublicKey, mint: PublicKey, amount: BigNumberish)
       }).compileToV0Message();
       const transaction = new VersionedTransaction(messageV0);
       transaction.sign([wallet, ...innerTransaction.signers]);
+      entryToken.tokenAmmount = amount.toString();
+      entryToken.timeSendSellTx = Date.now();
       const signature = await solanaConnection.sendRawTransaction(transaction.serialize(), {
         preflightCommitment: commitment,
       });
+      entryToken.timeSentSellTx = Date.now();
       logger.info({ mint, signature }, `Sent sell tx`);
       const confirmation = await solanaConnection.confirmTransaction(
         {
@@ -392,6 +402,7 @@ async function sell(accountId: PublicKey, mint: PublicKey, amount: BigNumberish)
       if (confirmation.value.err) {
         logger.debug(confirmation.value.err);
         logger.info({ mint, signature }, `Error confirming sell tx`);
+        entryToken.errorCode = -3;
         continue;
       }
 
@@ -404,9 +415,14 @@ async function sell(accountId: PublicKey, mint: PublicKey, amount: BigNumberish)
         },
         `Confirmed sell tx`,
       );
+      entryToken.sellTx = `https://solscan.io/tx/${signature}?cluster=${network}`;
+      entryToken.timeAcceptSellTx = Date.now();
+      entryToken.errorCode = 0;
+      entryToken.totalTimeSell = entryToken.timeAcceptSellTx - entryToken.timeSentSellTx;
       sold = true;
     } catch (e: any) {
       retries++;
+      entryToken.retrySellTimes = retries;
       logger.debug(e);
       logger.error({ mint }, `Failed to sell token, retry: ${retries}/${MAX_SELL_RETRIES}`);
     }
@@ -530,6 +546,30 @@ const runListener = async () => {
   if (USE_SNIPE_LIST) {
     setInterval(loadSnipeList, SNIPE_LIST_REFRESH_INTERVAL);
   }
+  if (AUTO_SAVE_LOG) {
+    setInterval( ()=>{
+      writeMapToFile(ledger, `log_buy_${runTimestamp}.txt`);
+    }, 30000);
+  }
+  // Function to convert object to string with '|' separated variables
+function objectToString(obj:any) {
+  return Object.values(obj).join('|');
+}
+
+// Function to write map to file
+function writeMapToFile(map: Map<String, TokenEntry>, filename:any) {
+  const stream = fs.openSync(filename, 'w');
+  fs.writeSync(stream,"[")
+  for (const [key, value] of map) {
+      //console.log(value);
+      const line = JSON.stringify(value)+",\n";
+      //const line = `${key}|${objectToString(value)}\n`;
+      fs.writeSync(stream,line);
+  }
+  fs.writeSync(stream,"]")
+  fs.closeSync(stream);
+}
+
 };
 
 runListener();

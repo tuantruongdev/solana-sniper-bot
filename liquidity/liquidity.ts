@@ -67,8 +67,6 @@ export async function getTokenAccounts(
   owner: PublicKey,
   commitment?: Commitment,
 ) {
-  logger.info("1.1");
-
   const tokenResp = await connection.getTokenAccountsByOwner(
     owner,
     {
@@ -76,8 +74,6 @@ export async function getTokenAccounts(
     },
     commitment,
   );
-  logger.info("1.2");
-
   const accounts: TokenAccount[] = [];
   for (const { pubkey, account } of tokenResp.value) {
     accounts.push({
