@@ -370,7 +370,7 @@ async function sell(accountId: PublicKey, mint: PublicKey, amount: BigNumberish)
         tokenAccount.poolKeys!.version,
       );
 
-      const latestBlockhash = await tempConn.getLatestBlockhash({
+      const latestBlockhash = await solanaConnection.getLatestBlockhash({
         commitment: commitment,
       });
       const messageV0 = new TransactionMessage({
