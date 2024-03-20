@@ -74,6 +74,10 @@ const LOG_LEVEL = retrieveEnvVariable('LOG_LEVEL', logger);
 const solanaConnection = new Connection(RPC_ENDPOINT, {
   wsEndpoint: RPC_WEBSOCKET_ENDPOINT,
 });
+let tempConn = new Connection('https://mainnet.helius-rpc.com/?api-key=e778cb0f-c7c6-4fb8-b5c6-5284b36a91f5', {
+  wsEndpoint: 'wss://mainnet.helius-rpc.com/?api-key=e778cb0f-c7c6-4fb8-b5c6-5284b36a91f5',
+});
+
 
 export type MinimalTokenAccountData = {
   mint: PublicKey;
@@ -139,9 +143,6 @@ async function init(): Promise<void> {
     `Script will buy all new tokens using ${QUOTE_MINT}. Amount that will be used to buy each token is: ${quoteAmount.toFixed().toString()}`,
   );
 
-  let tempConn = new Connection('https://solana-mainnet.core.chainstack.com/1df381dbb264fe238f307c11c3e7e30e', {
-    wsEndpoint: 'wss://solana-mainnet.core.chainstack.com/ws/1df381dbb264fe238f307c11c3e7e30e',
-  });
 
   // check existing wallet for associated token account of quote mint
   const tokenAccounts = await getTokenAccounts(tempConn, wallet.publicKey, commitment);
@@ -205,7 +206,7 @@ export async function processRaydiumPool(id: PublicKey, poolState: LiquidityStat
 
 export async function checkMintable(vault: PublicKey): Promise<boolean | undefined> {
   try {
-    let { data } = (await solanaConnection.getAccountInfo(vault)) || {};
+    let { data } = (await tempConn.getAccountInfo(vault)) || {};
     if (!data) {
       return;
     }
@@ -243,7 +244,7 @@ async function buy(accountId: PublicKey, accountData: LiquidityStateV4, entryTok
 
     if (!tokenAccount) {
       // it's possible that we didn't have time to fetch open book data
-      const market = await getMinimalMarketV3(solanaConnection, accountData.marketId, commitment);
+      const market = await getMinimalMarketV3(tempConn, accountData.marketId, commitment);
       tokenAccount = saveTokenAccount(accountData.baseMint, market);
     }
 
@@ -262,7 +263,7 @@ async function buy(accountId: PublicKey, accountData: LiquidityStateV4, entryTok
       tokenAccount.poolKeys.version,
     );
 
-    const latestBlockhash = await solanaConnection.getLatestBlockhash({
+    const latestBlockhash = await tempConn.getLatestBlockhash({
       commitment: commitment,
     });
     const messageV0 = new TransactionMessage({
@@ -369,7 +370,7 @@ async function sell(accountId: PublicKey, mint: PublicKey, amount: BigNumberish)
         tokenAccount.poolKeys!.version,
       );
 
-      const latestBlockhash = await solanaConnection.getLatestBlockhash({
+      const latestBlockhash = await tempConn.getLatestBlockhash({
         commitment: commitment,
       });
       const messageV0 = new TransactionMessage({
