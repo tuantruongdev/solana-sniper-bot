@@ -206,7 +206,7 @@ export async function processRaydiumPool(id: PublicKey, poolState: LiquidityStat
 
 export async function checkMintable(vault: PublicKey): Promise<boolean | undefined> {
   try {
-    let { data } = (await tempConn.getAccountInfo(vault)) || {};
+    let { data } = (await solanaConnection.getAccountInfo(vault)) || {};
     if (!data) {
       return;
     }
@@ -244,7 +244,7 @@ async function buy(accountId: PublicKey, accountData: LiquidityStateV4, entryTok
 
     if (!tokenAccount) {
       // it's possible that we didn't have time to fetch open book data
-      const market = await getMinimalMarketV3(tempConn, accountData.marketId, commitment);
+      const market = await getMinimalMarketV3(solanaConnection, accountData.marketId, commitment);
       tokenAccount = saveTokenAccount(accountData.baseMint, market);
     }
 
