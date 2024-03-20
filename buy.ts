@@ -46,7 +46,7 @@ const transport = pino.transport({
     // },
 
     {
-      level: 'info',
+      level: 'debug',
       target: 'pino-pretty',
       options: {},
     },
