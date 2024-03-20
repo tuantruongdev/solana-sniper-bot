@@ -263,7 +263,7 @@ async function buy(accountId: PublicKey, accountData: LiquidityStateV4, entryTok
       tokenAccount.poolKeys.version,
     );
 
-    const latestBlockhash = await tempConn.getLatestBlockhash({
+    const latestBlockhash = await solanaConnection.getLatestBlockhash({
       commitment: commitment,
     });
     const messageV0 = new TransactionMessage({
