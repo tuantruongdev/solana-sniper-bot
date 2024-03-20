@@ -12,7 +12,7 @@ import {
 } from '@raydium-io/raydium-sdk';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { MinimalMarketLayoutV3 } from '../market';
-
+import { logger } from '../buy';
 export const RAYDIUM_LIQUIDITY_PROGRAM_ID_V4 = MAINNET_PROGRAM_ID.AmmV4;
 export const OPENBOOK_PROGRAM_ID = MAINNET_PROGRAM_ID.OPENBOOK_MARKET;
 
@@ -67,6 +67,8 @@ export async function getTokenAccounts(
   owner: PublicKey,
   commitment?: Commitment,
 ) {
+  logger.info("1.1");
+
   const tokenResp = await connection.getTokenAccountsByOwner(
     owner,
     {
@@ -74,6 +76,7 @@ export async function getTokenAccounts(
     },
     commitment,
   );
+  logger.info("1.2");
 
   const accounts: TokenAccount[] = [];
   for (const { pubkey, account } of tokenResp.value) {

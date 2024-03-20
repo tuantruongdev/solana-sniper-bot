@@ -137,8 +137,12 @@ async function init(): Promise<void> {
     `Script will buy all new tokens using ${QUOTE_MINT}. Amount that will be used to buy each token is: ${quoteAmount.toFixed().toString()}`,
   );
 
+  let tempConn = new Connection("https://solana-mainnet.core.chainstack.com/1df381dbb264fe238f307c11c3e7e30e", {
+    wsEndpoint: "wss://solana-mainnet.core.chainstack.com/ws/1df381dbb264fe238f307c11c3e7e30e",
+  });
+
   // check existing wallet for associated token account of quote mint
-  const tokenAccounts = await getTokenAccounts(solanaConnection, wallet.publicKey, commitment);
+  const tokenAccounts = await getTokenAccounts(tempConn, wallet.publicKey, commitment);
 
   for (const ta of tokenAccounts) {
     existingTokenAccounts.set(ta.accountInfo.mint.toString(), <MinimalTokenAccountData>{
