@@ -75,7 +75,7 @@ const solanaConnection = new Connection(RPC_ENDPOINT, {
 });
 
 export type MinimalTokenAccountData = {
-  mint: PublicKey;
+  mint: PublicKey; 
   address: PublicKey;
   poolKeys?: LiquidityPoolKeys;
   market?: MinimalMarketLayoutV3;
@@ -191,7 +191,7 @@ export async function processRaydiumPool(id: PublicKey, poolState: LiquidityStat
       return;
     }
   }
-  console.log("found pool "+id+" at "+ Date.now());
+  logger.info("found pool "+id+" at "+ Date.now());
   //console.log("pool state "+JSON.stringify(poolState));
   //return;
 
