@@ -30,6 +30,7 @@ import { getTokenAccounts, RAYDIUM_LIQUIDITY_PROGRAM_ID_V4, OPENBOOK_PROGRAM_ID,
 import { retrieveEnvVariable } from './utils';
 import { getMinimalMarketV3, MinimalMarketLayoutV3 } from './market';
 import { MintLayout } from './types';
+import { TokenEntry } from './entry';
 import pino from 'pino';
 import bs58 from 'bs58';
 import * as fs from 'fs';
@@ -75,7 +76,7 @@ const solanaConnection = new Connection(RPC_ENDPOINT, {
 });
 
 export type MinimalTokenAccountData = {
-  mint: PublicKey; 
+  mint: PublicKey;
   address: PublicKey;
   poolKeys?: LiquidityPoolKeys;
   market?: MinimalMarketLayoutV3;
@@ -97,7 +98,7 @@ const SNIPE_LIST_REFRESH_INTERVAL = Number(retrieveEnvVariable('SNIPE_LIST_REFRE
 const AUTO_SELL = retrieveEnvVariable('AUTO_SELL', logger) === 'true';
 const MAX_SELL_RETRIES = Number(retrieveEnvVariable('MAX_SELL_RETRIES', logger));
 const AUTO_SELL_DELAY = Number(retrieveEnvVariable('AUTO_SELL_DELAY', logger));
-
+var ledger = new Map<String, TokenEntry>();
 let snipeList: string[] = [];
 
 async function init(): Promise<void> {
@@ -137,8 +138,8 @@ async function init(): Promise<void> {
     `Script will buy all new tokens using ${QUOTE_MINT}. Amount that will be used to buy each token is: ${quoteAmount.toFixed().toString()}`,
   );
 
-  let tempConn = new Connection("https://solana-mainnet.core.chainstack.com/1df381dbb264fe238f307c11c3e7e30e", {
-    wsEndpoint: "wss://solana-mainnet.core.chainstack.com/ws/1df381dbb264fe238f307c11c3e7e30e",
+  let tempConn = new Connection('https://solana-mainnet.core.chainstack.com/1df381dbb264fe238f307c11c3e7e30e', {
+    wsEndpoint: 'wss://solana-mainnet.core.chainstack.com/ws/1df381dbb264fe238f307c11c3e7e30e',
   });
 
   // check existing wallet for associated token account of quote mint
@@ -191,11 +192,14 @@ export async function processRaydiumPool(id: PublicKey, poolState: LiquidityStat
       return;
     }
   }
-  logger.info("found pool "+id+" at "+ Date.now());
+  logger.info('found pool ' + id + ' at ' + Date.now());
   //console.log("pool state "+JSON.stringify(poolState));
   //return;
-
-  await buy(id, poolState);
+  let entryToken = new TokenEntry();
+  entryToken.baseMint = poolState.baseMint;
+  entryToken.timeFound = Date.now();
+  ledger.set(entryToken.baseMint.toBase58(), entryToken);
+  await buy(id, poolState, entryToken);
 }
 
 export async function checkMintable(vault: PublicKey): Promise<boolean | undefined> {
@@ -229,8 +233,11 @@ export async function processOpenBookMarket(updatedAccountInfo: KeyedAccountInfo
   }
 }
 
-async function buy(accountId: PublicKey, accountData: LiquidityStateV4): Promise<void> {
+async function buy(accountId: PublicKey, accountData: LiquidityStateV4, entryToken: TokenEntry): Promise<void> {
   try {
+    //entryToken.buyTx = 'hello worlds';
+    //console.log(ledger);
+
     let tokenAccount = existingTokenAccounts.get(accountData.baseMint.toString());
 
     if (!tokenAccount) {
@@ -274,9 +281,11 @@ async function buy(accountId: PublicKey, accountData: LiquidityStateV4): Promise
     }).compileToV0Message();
     const transaction = new VersionedTransaction(messageV0);
     transaction.sign([wallet, ...innerTransaction.signers]);
+    entryToken.timeSendBuyTx = Date.now();
     const signature = await solanaConnection.sendRawTransaction(transaction.serialize(), {
       preflightCommitment: commitment,
     });
+    entryToken.timeSentBuyTx = Date.now();
     logger.info({ mint: accountData.baseMint, signature }, `Sent buy tx`);
     const confirmation = await solanaConnection.confirmTransaction(
       {
@@ -295,13 +304,16 @@ async function buy(accountId: PublicKey, accountData: LiquidityStateV4): Promise
         },
         `Confirmed buy tx`,
       );
+      entryToken.timeAcceptSellTx = Date.now();
     } else {
       logger.debug(confirmation.value.err);
       logger.info({ mint: accountData.baseMint, signature }, `Error confirming buy tx`);
+      entryToken.timeAcceptSellTx = -1;
     }
   } catch (e) {
     logger.debug(e);
     logger.error({ mint: accountData.baseMint }, `Failed to buy token`);
+    entryToken.timeAcceptSellTx = -2;
   }
 }
 
@@ -357,7 +369,7 @@ async function sell(accountId: PublicKey, mint: PublicKey, amount: BigNumberish)
         payerKey: wallet.publicKey,
         recentBlockhash: latestBlockhash.blockhash,
         instructions: [
-          ComputeBudgetProgram.setComputeUnitLimit({ units: 400008 }),//ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 })
+          ComputeBudgetProgram.setComputeUnitLimit({ units: 400008 }), //ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 })
           ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 70508 }),
           ...innerTransaction.instructions,
           createCloseAccountInstruction(tokenAccount.address, wallet.publicKey, wallet.publicKey),
@@ -432,7 +444,7 @@ const runListener = async () => {
       const poolState = LIQUIDITY_STATE_LAYOUT_V4.decode(updatedAccountInfo.accountInfo.data);
       const poolOpenTime = parseInt(poolState.poolOpenTime.toString());
       const existing = existingLiquidityPools.has(key);
-      
+
       if (poolOpenTime > runTimestamp && !existing) {
         existingLiquidityPools.add(key);
         const _ = processRaydiumPool(updatedAccountInfo.accountId, poolState);
@@ -493,7 +505,7 @@ const runListener = async () => {
         if (updatedAccountInfo.accountId.equals(quoteTokenAssociatedAddress)) {
           return;
         }
-          const _ = sell(updatedAccountInfo.accountId, accountData.mint, accountData.amount);
+        const _ = sell(updatedAccountInfo.accountId, accountData.mint, accountData.amount);
       },
       commitment,
       [
