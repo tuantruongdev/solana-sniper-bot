@@ -581,8 +581,8 @@ async function getPoolInfo(poolState:LiquidityStateV4):Promise<PoolInfo> {
       poolInfo.qouteVault = poolState.quoteVault;
       poolInfo.baseVault = poolState.baseVault;
       //solanaConnection.getMultipleAccounts
-      const baseTokenAmount = await solanaConnection.getTokenAccountBalance(poolState.baseVault);
-      const quoteTokenAmount = await solanaConnection.getTokenAccountBalance(poolState.quoteVault);
+      const baseTokenAmount = await solanaConnection.getTokenAccountBalance(poolState.baseVault,commitment);
+      const quoteTokenAmount = await solanaConnection.getTokenAccountBalance(poolState.quoteVault,commitment);
       let tokenPooled = baseTokenAmount.value.uiAmount;
       let pairPooled = quoteTokenAmount.value.uiAmount;
       poolInfo.tokenPooled = tokenPooled != null ? tokenPooled : 0;
