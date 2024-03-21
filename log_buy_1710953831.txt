@@ -1,2 +1,0 @@
-[{"baseMint":"Cjt9jVnF6YkKK3cqQJx7YYkpRpnnMCHkBcEVywbVM3hu","timeFound":1710953932024,"timeSendBuyTx":1710953932704,"timeSentBuyTx":1710953932998,"timeAcceptBuyTx":0,"timeSendSellTx":0,"timeSentSellTx":0,"timeAcceptSellTx":0,"retrySellTimes":0,"buyTx":"","sellTx":"","buySolAmmount":"","sellSolAmmount":0,"tokenAmmount":"0","totalTimeBuy":0,"totalTimeSell":0,"errorCode":0},
-]

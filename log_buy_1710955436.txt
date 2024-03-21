@@ -1,2 +1,0 @@
-[{"baseMint":"AWM1oJz7jnJYTSqpCSWzrTPT86XdVLPJef4aeH5W4v9i","timeFound":1710955898155,"timeSendBuyTx":1710955898428,"timeSentBuyTx":1710955898673,"timeAcceptBuyTx":1710955922214,"timeSendSellTx":1710955923486,"timeSentSellTx":1710955923752,"timeAcceptSellTx":0,"retrySellTimes":0,"buyTx":"https://solscan.io/tx/37wP4FAJwU8J9L28i3tTFEzJZQ2TiUQkbw3asbmjLTmGJNk9zMbz56WHJm9hoTqEoEN1ufVfGFGVH3FfFUqc5LSg?cluster=mainnet-beta","sellTx":"","buySolAmmount":"0.00001","sellSolAmmount":0,"tokenAmmount":"181016632","totalTimeBuy":24059,"totalTimeSell":0,"errorCode":0},
-]

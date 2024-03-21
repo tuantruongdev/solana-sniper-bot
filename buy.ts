@@ -99,6 +99,10 @@ let quoteToken: Token;
 let quoteTokenAssociatedAddress: PublicKey;
 let quoteAmount: TokenAmount;
 let commitment: Commitment = retrieveEnvVariable('COMMITMENT_LEVEL', logger) as Commitment;
+let processingToken: Boolean = false;
+let solPrice: Number = 0;
+const SOL = 'So11111111111111111111111111111111111111112';
+const USDC = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
 
 const CHECK_IF_MINT_IS_RENOUNCED = retrieveEnvVariable('CHECK_IF_MINT_IS_RENOUNCED', logger) === 'true';
 const USE_SNIPE_LIST = retrieveEnvVariable('USE_SNIPE_LIST', logger) === 'true';
@@ -110,7 +114,10 @@ const AUTO_SELL_DELAY = Number(retrieveEnvVariable('AUTO_SELL_DELAY', logger));
 const RETRY_GET_ACCOUNT_INFO = Number(retrieveEnvVariable('RETRY_GET_ACCOUNT_INFO', logger));
 const DELAY_RETRY_GETACCOUNT_INFO = Number(retrieveEnvVariable('DELAY_RETRY_GETACCOUNT_INFO', logger));
 const LIQUIDITY_SUPPLY_PERCENTAGE = Number(retrieveEnvVariable('LIQUIDITY_SUPPLY_PERCENTAGE', logger));
-const CHECK_LIQUIDITY = retrieveEnvVariable('CHECK_LIQUIDITY', logger) === 'true';
+const CHECK_LOCKED_LIQUIDITY = retrieveEnvVariable('CHECK_LOCKED_LIQUIDITY', logger) === 'true';
+const MIN_LIQUIDITY_USD = Number(retrieveEnvVariable('MIN_LIQUIDITY_USD', logger));
+const CHECK_LIQUIDITY_AMMOUNT = retrieveEnvVariable('CHECK_LIQUIDITY_AMMOUNT', logger) === 'true';
+const ONE_TOKEN_AT_A_TIME = retrieveEnvVariable('ONE_TOKEN_AT_A_TIME', logger);
 const BUY_MICRO_LAMPOT = Number(retrieveEnvVariable('BUY_MICRO_LAMPOT', logger));
 const BUY_COMPUTE_UNIT = Number(retrieveEnvVariable('BUY_COMPUTE_UNIT', logger));
 const SELL_MICRO_LAMPOT = Number(retrieveEnvVariable('SELL_MICRO_LAMPOT', logger));
@@ -150,7 +157,12 @@ async function init(): Promise<void> {
       throw new Error(`Unsupported quote mint "${QUOTE_MINT}". Supported values are USDC and WSOL`);
     }
   }
-
+  solPrice = await getCurrentSolPrice();
+  if (solPrice == 0) {
+    logger.error("could'nt fetch the sol price! stopping");
+    return;
+  }
+  logger.info('Updated sol price :' + solPrice);
   logger.info(
     `Script will buy all new tokens using ${QUOTE_MINT}. Amount that will be used to buy each token is: ${quoteAmount.toFixed().toString()}`,
   );
@@ -177,6 +189,21 @@ async function init(): Promise<void> {
 
   // load tokens to snipe
   loadSnipeList();
+}
+
+async function getCurrentSolPrice(): Promise<Number> {
+  try {
+    let data = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=solana');
+    var body = await data.json();
+    let price = Number(body[0].current_price);
+    if (price <= 0) {
+      return solPrice;
+    }
+
+    return price;
+  } catch (e) {
+    return solPrice;
+  }
 }
 
 function saveTokenAccount(mint: PublicKey, accountData: MinimalMarketLayoutV3) {
@@ -211,8 +238,14 @@ export async function processRaydiumPool(id: PublicKey, poolState: LiquidityStat
     }
   }
   logger.info('found pool ' + id + ' at ' + Date.now());
-  //if sinper enabled then dont check liquidity anymore
-  if (CHECK_LIQUIDITY && !USE_SNIPE_LIST) {
+
+  //if sinper enabled then dont check liquidity ammount anymore
+  if (CHECK_LIQUIDITY_AMMOUNT && !USE_SNIPE_LIST) {
+    console.log(JSON.stringify(poolState));
+    return;
+  }
+  //if sinper enabled then dont check liquidity locked anymore
+  if (CHECK_LOCKED_LIQUIDITY && !USE_SNIPE_LIST) {
     if (accInfo == undefined) {
       accInfo = await getParsedAccountInfo(new PublicKey(poolState.lpMint), RETRY_GET_ACCOUNT_INFO);
     }
@@ -233,7 +266,7 @@ export async function processRaydiumPool(id: PublicKey, poolState: LiquidityStat
       );
       return;
     } else {
-      logger.info('pool +' + id + '+ locked at ' + lpPercentBurned + '%');
+      logger.info('pool ' + id + ' locked at ' + lpPercentBurned + '%');
     }
   }
 
@@ -258,7 +291,7 @@ export async function getParsedAccountInfo(vault: PublicKey, retry: number): Pro
   try {
     let { data } = (await solanaConnection.getAccountInfo(vault)) || {};
     if (!data) {
-      logger.error("can't get account info retrying " + retry);
+      //  / logger.error("can't get account info retrying " + retry);
       if (retry.valueOf() > 0) {
         await new Promise((resolve) => setTimeout(resolve, DELAY_RETRY_GETACCOUNT_INFO));
         return await getParsedAccountInfo(vault, --retry);
@@ -345,6 +378,7 @@ async function buy(accountId: PublicKey, accountData: LiquidityStateV4, entryTok
     });
     entryToken.timeSentBuyTx = Date.now();
     logger.info({ mint: accountData.baseMint, signature }, `Sent buy tx`);
+    processingToken = true;
     const confirmation = await solanaConnection.confirmTransaction(
       {
         signature,
@@ -374,6 +408,7 @@ async function buy(accountId: PublicKey, accountData: LiquidityStateV4, entryTok
   } catch (e) {
     logger.debug(e);
     logger.error({ mint: accountData.baseMint }, `Failed to buy token`);
+    processingToken = false;
     entryToken.errorCode = -2;
   }
 }
@@ -477,6 +512,7 @@ async function sell(accountId: PublicKey, mint: PublicKey, amount: BigNumberish)
       entryToken.errorCode = 0;
       entryToken.totalTimeSell = entryToken.timeAcceptSellTx - entryToken.timeSentSellTx;
       sold = true;
+      processingToken = false;
     } catch (e: any) {
       retries++;
       entryToken.retrySellTimes = retries;
@@ -504,7 +540,10 @@ function loadSnipeList() {
 }
 
 function shouldBuy(key: string): boolean {
-  return USE_SNIPE_LIST ? snipeList.includes(key) : true;
+  if (!USE_SNIPE_LIST && ONE_TOKEN_AT_A_TIME && processingToken) {
+    logger.info('ignored mint ' + key + ' because currently processing another mint');
+  }
+  return USE_SNIPE_LIST ? snipeList.includes(key) : ONE_TOKEN_AT_A_TIME ? !processingToken : true;
 }
 
 async function calculateLPBurned(poolState: any, accInfo: RawMint): Promise<Number> {
@@ -537,8 +576,42 @@ const runListener = async () => {
     async (updatedAccountInfo) => {
       const key = updatedAccountInfo.accountId.toString();
       const poolState = LIQUIDITY_STATE_LAYOUT_V4.decode(updatedAccountInfo.accountInfo.data);
-
       const poolOpenTime = parseInt(poolState.poolOpenTime.toString());
+
+      //solanaConnection.getMultipleAccounts
+      const baseTokenAmount = await solanaConnection.getTokenAccountBalance(poolState.baseVault);
+      const quoteTokenAmount = await solanaConnection.getTokenAccountBalance(poolState.quoteVault);
+      let tokenPooled = baseTokenAmount.value.uiAmount;
+      let pairPooled = quoteTokenAmount.value.uiAmount;
+      let currentQuoteMint = poolState.quoteMint.toBase58();
+      // if (currentQuoteMint == SOL) {
+      //   currentQuoteMint = 'SOL';
+      // } else if (currentQuoteMint == USDC) {
+      //   currentQuoteMint = 'USDC';
+      // }
+
+      let quoteVault = poolState.quoteVault.toBase58(); //token account hold sol.usdc...
+      let baseVault = poolState.baseVault.toBase58(); //token account hold paired token
+      if (pairPooled && tokenPooled) {
+        let solTokenPrice = -1;
+        let usdcPrice = -1;
+        if (currentQuoteMint == SOL) {
+          solTokenPrice = pairPooled / tokenPooled;
+          usdcPrice = (pairPooled * solPrice.valueOf()) / tokenPooled;
+        } else if (currentQuoteMint == USDC) {
+          usdcPrice = pairPooled / tokenPooled;
+          solTokenPrice = pairPooled / solPrice.valueOf() / tokenPooled;
+        }
+        logger.info(
+          'mint ' +
+            poolState.baseMint.toBase58() +
+            ' sol price ' +
+            solTokenPrice.toFixed(10) +
+            ' usdc price ' +
+            usdcPrice.toFixed(10),
+        );
+      }
+
       const existing = existingLiquidityPools.has(key);
       if (poolOpenTime > runTimestamp && !existing) {
         existingLiquidityPools.add(key);
