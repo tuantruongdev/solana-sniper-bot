@@ -1,0 +1,2 @@
+[{"baseMint":"93K9P3LpERY8L8aghGA4beB1ruDe43X5eSuppRgNLxfS","timeFound":1711036198939,"timeSendBuyTx":1711036199203,"timeSentBuyTx":1711036199472,"timeAcceptBuyTx":0,"timeSendSellTx":0,"timeSentSellTx":0,"timeAcceptSellTx":0,"retrySellTimes":0,"buyTx":"","sellTx":"","buySolAmmount":"","sellSolAmmount":0,"tokenAmmount":"0","totalTimeBuy":0,"totalTimeSell":0,"errorCode":0},
+]

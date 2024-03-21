@@ -245,7 +245,7 @@ export async function processRaydiumPool(id: PublicKey, poolState: LiquidityStat
   if (CHECK_LIQUIDITY_AMMOUNT && !USE_SNIPE_LIST) {
     let poolInfo = await getPoolInfo(poolState);
     if(poolInfo.totalLiquidity < MIN_LIQUIDITY_USD){
-      logger.info('pool ' + id + ' have '+ Math.round(poolInfo.liquidityUSDC) +" USD lower than "+ MIN_LIQUIDITY_USD+" USD skipping");
+      logger.info('pool ' + id + ' have '+ Math.round(poolInfo.liquidityUSDC) +" USD in liquidity lower than "+ MIN_LIQUIDITY_USD+" USD skipping");
       return;
     }
     logger.info('pool ' + id + ' have '+ Math.round(poolInfo.liquidityUSDC) +" USD in liquidity");
@@ -622,6 +622,7 @@ async function getPoolInfo(poolState:LiquidityStateV4):Promise<PoolInfo> {
       }
       return poolInfo;
     }catch(e){
+      logger.error(e);
       return new PoolInfo();
     }
 }
