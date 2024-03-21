@@ -31,7 +31,7 @@ import { getTokenAccounts, RAYDIUM_LIQUIDITY_PROGRAM_ID_V4, OPENBOOK_PROGRAM_ID,
 import { retrieveEnvVariable } from './utils';
 import { getMinimalMarketV3, MinimalMarketLayoutV3 } from './market';
 import { MintLayout } from './types';
-import { TokenEntry } from './entry';
+import { PoolInfo, TokenEntry } from './entry';
 import pino, { P } from 'pino';
 import bs58 from 'bs58';
 import * as fs from 'fs';
@@ -70,13 +70,15 @@ export const logger = pino(
 const network = 'mainnet-beta';
 const RPC_ENDPOINT = retrieveEnvVariable('RPC_ENDPOINT', logger);
 const RPC_WEBSOCKET_ENDPOINT = retrieveEnvVariable('RPC_WEBSOCKET_ENDPOINT', logger);
+const RPC_ENDPOINT_ALT = retrieveEnvVariable('RPC_ENDPOINT', logger);
+const RPC_WEBSOCKET_ENDPOINT_ALT = retrieveEnvVariable('RPC_WEBSOCKET_ENDPOINT', logger);
 const LOG_LEVEL = retrieveEnvVariable('LOG_LEVEL', logger);
 
 const solanaConnection = new Connection(RPC_ENDPOINT, {
   wsEndpoint: RPC_WEBSOCKET_ENDPOINT,
 });
-let tempConn = new Connection('https://solana-mainnet.core.chainstack.com/1df381dbb264fe238f307c11c3e7e30e', {
-  wsEndpoint: 'wss://solana-mainnet.core.chainstack.com/ws/1df381dbb264fe238f307c11c3e7e30e',
+let tempConn = new Connection(RPC_ENDPOINT_ALT, {
+  wsEndpoint: RPC_WEBSOCKET_ENDPOINT_ALT,
 });
 
 // let tempConn = new Connection('https://mainnet.helius-rpc.com/?api-key=e778cb0f-c7c6-4fb8-b5c6-5284b36a91f5', {
@@ -241,8 +243,12 @@ export async function processRaydiumPool(id: PublicKey, poolState: LiquidityStat
 
   //if sinper enabled then dont check liquidity ammount anymore
   if (CHECK_LIQUIDITY_AMMOUNT && !USE_SNIPE_LIST) {
-    console.log(JSON.stringify(poolState));
-    return;
+    let poolInfo = await getPoolInfo(poolState);
+    if(poolInfo.totalLiquidity < MIN_LIQUIDITY_USD){
+      logger.info('pool ' + id + ' have '+ Math.round(poolInfo.liquidityUSDC) +" USD lower than "+ MIN_LIQUIDITY_USD+" USD skipping");
+      return;
+    }
+    logger.info('pool ' + id + ' have '+ Math.round(poolInfo.liquidityUSDC) +" USD in liquidity");
   }
   //if sinper enabled then dont check liquidity locked anymore
   if (CHECK_LOCKED_LIQUIDITY && !USE_SNIPE_LIST) {
@@ -567,6 +573,54 @@ async function calculateLPBurned(poolState: any, accInfo: RawMint): Promise<Numb
   //console.log(`${burnPct} % LP burned`);
   return Number(burnPct);
 }
+async function getPoolInfo(poolState:LiquidityStateV4):Promise<PoolInfo> {
+      let poolInfo = new PoolInfo(); 
+      poolInfo.baseMint = poolState.baseMint;
+      poolInfo.qouteMint = poolState.quoteMint;
+      poolInfo.qouteVault = poolState.quoteVault;
+      poolInfo.baseVault = poolState.baseVault;
+      //solanaConnection.getMultipleAccounts
+      const baseTokenAmount = await solanaConnection.getTokenAccountBalance(poolState.baseVault);
+      const quoteTokenAmount = await solanaConnection.getTokenAccountBalance(poolState.quoteVault);
+      let tokenPooled = baseTokenAmount.value.uiAmount;
+      let pairPooled = quoteTokenAmount.value.uiAmount;
+      poolInfo.tokenPooled = tokenPooled != null ? tokenPooled : 0;
+      poolInfo.pairPooled = pairPooled != null ? pairPooled : 0;
+      let currentQuoteMint = poolState.quoteMint.toBase58();
+      if (pairPooled && tokenPooled) {
+        let solTokenPrice = -1;
+        let usdcPrice = -1;
+        if (currentQuoteMint == SOL) {
+          solTokenPrice = pairPooled / tokenPooled;
+          usdcPrice = (pairPooled * solPrice.valueOf()) / tokenPooled;
+
+          poolInfo.liquiditySol = pairPooled;
+          poolInfo.liquidityUSDC = solPrice.valueOf() * pairPooled;
+        }
+         else if(currentQuoteMint == USDC) {
+          usdcPrice = pairPooled / tokenPooled;
+          solTokenPrice = pairPooled / solPrice.valueOf() / tokenPooled;
+          
+          poolInfo.liquidityUSDC = pairPooled;
+          poolInfo.liquiditySol = pairPooled / solPrice.valueOf();
+        }
+        poolInfo.totalLiquidity =poolInfo.liquidityUSDC + (tokenPooled * usdcPrice);
+        
+        poolInfo.priceSol = solTokenPrice;
+        poolInfo.priceUSDC = usdcPrice;
+        
+        // logger.info(
+        //   'mint ' +
+        //     poolState.baseMint.toBase58() +
+        //     ' sol price ' +
+        //     solTokenPrice.toFixed(10) +
+        //     ' usdc price ' +
+        //     usdcPrice.toFixed(10),
+        // );
+        return poolInfo;
+      }
+      return poolInfo;
+}
 
 const runListener = async () => {
   await init();
@@ -577,41 +631,7 @@ const runListener = async () => {
       const key = updatedAccountInfo.accountId.toString();
       const poolState = LIQUIDITY_STATE_LAYOUT_V4.decode(updatedAccountInfo.accountInfo.data);
       const poolOpenTime = parseInt(poolState.poolOpenTime.toString());
-
-      //solanaConnection.getMultipleAccounts
-      const baseTokenAmount = await solanaConnection.getTokenAccountBalance(poolState.baseVault);
-      const quoteTokenAmount = await solanaConnection.getTokenAccountBalance(poolState.quoteVault);
-      let tokenPooled = baseTokenAmount.value.uiAmount;
-      let pairPooled = quoteTokenAmount.value.uiAmount;
-      let currentQuoteMint = poolState.quoteMint.toBase58();
-      // if (currentQuoteMint == SOL) {
-      //   currentQuoteMint = 'SOL';
-      // } else if (currentQuoteMint == USDC) {
-      //   currentQuoteMint = 'USDC';
-      // }
-
-      let quoteVault = poolState.quoteVault.toBase58(); //token account hold sol.usdc...
-      let baseVault = poolState.baseVault.toBase58(); //token account hold paired token
-      if (pairPooled && tokenPooled) {
-        let solTokenPrice = -1;
-        let usdcPrice = -1;
-        if (currentQuoteMint == SOL) {
-          solTokenPrice = pairPooled / tokenPooled;
-          usdcPrice = (pairPooled * solPrice.valueOf()) / tokenPooled;
-        } else if (currentQuoteMint == USDC) {
-          usdcPrice = pairPooled / tokenPooled;
-          solTokenPrice = pairPooled / solPrice.valueOf() / tokenPooled;
-        }
-        logger.info(
-          'mint ' +
-            poolState.baseMint.toBase58() +
-            ' sol price ' +
-            solTokenPrice.toFixed(10) +
-            ' usdc price ' +
-            usdcPrice.toFixed(10),
-        );
-      }
-
+      //console.log(JSON.stringify(await getPoolInfo(poolState)));
       const existing = existingLiquidityPools.has(key);
       if (poolOpenTime > runTimestamp && !existing) {
         existingLiquidityPools.add(key);
