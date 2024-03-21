@@ -83,7 +83,6 @@ let tempConn = new Connection('https://solana-mainnet.core.chainstack.com/1df381
 //   wsEndpoint: 'wss://mainnet.helius-rpc.com/?api-key=e778cb0f-c7c6-4fb8-b5c6-5284b36a91f5',
 // });
 
-
 export type MinimalTokenAccountData = {
   mint: PublicKey;
   address: PublicKey;
@@ -112,6 +111,10 @@ const RETRY_GET_ACCOUNT_INFO = Number(retrieveEnvVariable('RETRY_GET_ACCOUNT_INF
 const DELAY_RETRY_GETACCOUNT_INFO = Number(retrieveEnvVariable('DELAY_RETRY_GETACCOUNT_INFO', logger));
 const LIQUIDITY_SUPPLY_PERCENTAGE = Number(retrieveEnvVariable('LIQUIDITY_SUPPLY_PERCENTAGE', logger));
 const CHECK_LIQUIDITY = retrieveEnvVariable('CHECK_LIQUIDITY', logger) === 'true';
+const BUY_MICRO_LAMPOT = Number(retrieveEnvVariable('BUY_MICRO_LAMPOT', logger));
+const BUY_COMPUTE_UNIT = Number(retrieveEnvVariable('BUY_COMPUTE_UNIT', logger));
+const SELL_MICRO_LAMPOT = Number(retrieveEnvVariable('SELL_MICRO_LAMPOT', logger));
+const SELL_COMPUTE_UNIT = Number(retrieveEnvVariable('SELL_COMPUTE_UNIT', logger));
 var ledger = new Map<String, TokenEntry>();
 let snipeList: string[] = [];
 
@@ -151,8 +154,9 @@ async function init(): Promise<void> {
   logger.info(
     `Script will buy all new tokens using ${QUOTE_MINT}. Amount that will be used to buy each token is: ${quoteAmount.toFixed().toString()}`,
   );
-
-
+  let estimatedBuyFee = (BUY_MICRO_LAMPOT * BUY_COMPUTE_UNIT) / 1000000 / 1000000000;
+  let estimatedSellFee = (SELL_MICRO_LAMPOT * SELL_COMPUTE_UNIT) / 1000000 / 1000000000;
+  logger.info(`Estimated buy fee ${estimatedBuyFee.toFixed(6)} . Estimated sell fee ${estimatedSellFee.toFixed(6)} `);
   // check existing wallet for associated token account of quote mint
   const tokenAccounts = await getTokenAccounts(tempConn, wallet.publicKey, commitment);
 
@@ -194,10 +198,10 @@ export async function processRaydiumPool(id: PublicKey, poolState: LiquidityStat
   if (!shouldBuy(poolState.baseMint.toString())) {
     return;
   }
-  let accInfo:any = undefined;
+  let accInfo: any = undefined;
   if (CHECK_IF_MINT_IS_RENOUNCED) {
-    accInfo = await getParsedAccountInfo(poolState.baseMint,RETRY_GET_ACCOUNT_INFO);
-    if(accInfo == undefined){
+    accInfo = await getParsedAccountInfo(poolState.baseMint, RETRY_GET_ACCOUNT_INFO);
+    if (accInfo == undefined) {
       return;
     }
     const mintOption = checkMintable(accInfo);
@@ -208,20 +212,28 @@ export async function processRaydiumPool(id: PublicKey, poolState: LiquidityStat
   }
   logger.info('found pool ' + id + ' at ' + Date.now());
   //if sinper enabled then dont check liquidity anymore
-  if(CHECK_LIQUIDITY && !USE_SNIPE_LIST){
-    if(accInfo == undefined){
-     accInfo = await getParsedAccountInfo(new PublicKey(poolState.lpMint),RETRY_GET_ACCOUNT_INFO);
+  if (CHECK_LIQUIDITY && !USE_SNIPE_LIST) {
+    if (accInfo == undefined) {
+      accInfo = await getParsedAccountInfo(new PublicKey(poolState.lpMint), RETRY_GET_ACCOUNT_INFO);
     }
-    let lpPercentBurned = await calculateLPBurned(poolState,accInfo);
-    if(lpPercentBurned.valueOf() == -1){
-      logger.info('pool '+id+' getting locked liquid failed skipping');
+    let lpPercentBurned = await calculateLPBurned(poolState, accInfo);
+    if (lpPercentBurned.valueOf() == -1) {
+      logger.info('pool ' + id + ' getting locked liquid failed skipping');
       return;
     }
-    if(lpPercentBurned.valueOf() < LIQUIDITY_SUPPLY_PERCENTAGE){
-      logger.info('pool '+id+' not locked only '+ lpPercentBurned +'% lower than ' + LIQUIDITY_SUPPLY_PERCENTAGE +"% skipping");
+    if (lpPercentBurned.valueOf() < LIQUIDITY_SUPPLY_PERCENTAGE) {
+      logger.info(
+        'pool ' +
+          id +
+          ' not locked only ' +
+          lpPercentBurned +
+          '% lower than ' +
+          LIQUIDITY_SUPPLY_PERCENTAGE +
+          '% skipping',
+      );
       return;
-    }else{
-      logger.info('pool +'+id+'+ locked at ' + lpPercentBurned +"%");
+    } else {
+      logger.info('pool +' + id + '+ locked at ' + lpPercentBurned + '%');
     }
   }
 
@@ -242,19 +254,17 @@ export function checkMintable(deserialize: RawMint): boolean | undefined {
   }
 }
 
-export async function getParsedAccountInfo(vault: PublicKey,retry:number): Promise<RawMint | undefined> {
+export async function getParsedAccountInfo(vault: PublicKey, retry: number): Promise<RawMint | undefined> {
   try {
     let { data } = (await solanaConnection.getAccountInfo(vault)) || {};
     if (!data) {
       logger.error("can't get account info retrying " + retry);
-      if(retry.valueOf() > 0){
-      await new Promise((resolve) => setTimeout(resolve, DELAY_RETRY_GETACCOUNT_INFO));
-       return await getParsedAccountInfo(vault,--retry);
-      }else{
+      if (retry.valueOf() > 0) {
+        await new Promise((resolve) => setTimeout(resolve, DELAY_RETRY_GETACCOUNT_INFO));
+        return await getParsedAccountInfo(vault, --retry);
+      } else {
         return;
       }
-      
-     
     }
     const deserialize = MintLayout.decode(data);
     return deserialize;
@@ -263,7 +273,6 @@ export async function getParsedAccountInfo(vault: PublicKey,retry:number): Promi
     logger.error({ mint: vault }, `Failed to get account info`);
   }
 }
-
 
 export async function processOpenBookMarket(updatedAccountInfo: KeyedAccountInfo) {
   let accountData: MarketStateV3 | undefined;
@@ -317,8 +326,8 @@ async function buy(accountId: PublicKey, accountData: LiquidityStateV4, entryTok
       payerKey: wallet.publicKey,
       recentBlockhash: latestBlockhash.blockhash,
       instructions: [
-        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 421197 }),
-        ComputeBudgetProgram.setComputeUnitLimit({ units: 111337 }),
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: BUY_MICRO_LAMPOT }),
+        ComputeBudgetProgram.setComputeUnitLimit({ units: BUY_COMPUTE_UNIT }),
         createAssociatedTokenAccountIdempotentInstruction(
           wallet.publicKey,
           tokenAccount.address,
@@ -356,7 +365,7 @@ async function buy(accountId: PublicKey, accountData: LiquidityStateV4, entryTok
       entryToken.buyTx = `https://solscan.io/tx/${signature}?cluster=${network}`;
       entryToken.buySolAmmount = quoteAmount.toExact();
       entryToken.timeAcceptBuyTx = Date.now();
-      entryToken.totalTimeBuy= entryToken.timeAcceptBuyTx - entryToken.timeFound;
+      entryToken.totalTimeBuy = entryToken.timeAcceptBuyTx - entryToken.timeFound;
     } else {
       logger.debug(confirmation.value.err);
       logger.info({ mint: accountData.baseMint, signature }, `Error confirming buy tx`);
@@ -373,7 +382,7 @@ async function sell(accountId: PublicKey, mint: PublicKey, amount: BigNumberish)
   let sold = false;
   let retries = 0;
   let entryToken = ledger.get(mint.toBase58());
-  if(entryToken == undefined){
+  if (entryToken == undefined) {
     return;
   }
   if (AUTO_SELL_DELAY > 0) {
@@ -424,8 +433,8 @@ async function sell(accountId: PublicKey, mint: PublicKey, amount: BigNumberish)
         payerKey: wallet.publicKey,
         recentBlockhash: latestBlockhash.blockhash,
         instructions: [
-          ComputeBudgetProgram.setComputeUnitLimit({ units: 400008 }), //ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 })
-          ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 70508 }),
+          ComputeBudgetProgram.setComputeUnitLimit({ units: SELL_MICRO_LAMPOT }), //ComputeBudgetProgram.setComputeUnitLimit({ units: 400000 })
+          ComputeBudgetProgram.setComputeUnitPrice({ microLamports: SELL_COMPUTE_UNIT }),
           ...innerTransaction.instructions,
           createCloseAccountInstruction(tokenAccount.address, wallet.publicKey, wallet.publicKey),
         ],
@@ -498,22 +507,22 @@ function shouldBuy(key: string): boolean {
   return USE_SNIPE_LIST ? snipeList.includes(key) : true;
 }
 
-async function calculateLPBurned(poolState : any,accInfo :RawMint):Promise<Number>{
+async function calculateLPBurned(poolState: any, accInfo: RawMint): Promise<Number> {
   const lpMint = poolState.lpMint;
-  let lpReserve:any = poolState.lpReserve;
+  let lpReserve: any = poolState.lpReserve;
   //const accInfo = await getParsedAccountInfo(new PublicKey(lpMint));
-  if(accInfo == undefined){
+  if (accInfo == undefined) {
     //logger.error("failed to calulate mint info")
     return -1;
   }
-  
-  lpReserve = lpReserve / Math.pow(10,accInfo.decimals);
+
+  lpReserve = lpReserve / Math.pow(10, accInfo.decimals);
   const actualSupply = accInfo.supply / BigInt(Math.pow(10, accInfo.decimals));
   //console.log(`lpMint: ${lpMint}, Reserve: ${lpReserve}, Actual Supply: ${actualSupply}`);
-  lpReserve = BigInt(Math.round(lpReserve))
+  lpReserve = BigInt(Math.round(lpReserve));
   //Calculate burn percentage
-    // const maxLpSupply = actualSupply > BigInt(lpReserve - BigInt(1))?actualSupply : BigInt(lpReserve - BigInt(1));
-  const burnAmt = (lpReserve - actualSupply)
+  // const maxLpSupply = actualSupply > BigInt(lpReserve - BigInt(1))?actualSupply : BigInt(lpReserve - BigInt(1));
+  const burnAmt = lpReserve - actualSupply;
   //console.log(`burn amt: ${burnAmt}`)
   const burnPct = (burnAmt / BigInt(lpReserve)) * BigInt(100);
   //console.log(`${burnPct} % LP burned`);
@@ -529,8 +538,7 @@ const runListener = async () => {
       const key = updatedAccountInfo.accountId.toString();
       const poolState = LIQUIDITY_STATE_LAYOUT_V4.decode(updatedAccountInfo.accountInfo.data);
 
-
-      const poolOpenTime =  parseInt(poolState.poolOpenTime.toString());
+      const poolOpenTime = parseInt(poolState.poolOpenTime.toString());
       const existing = existingLiquidityPools.has(key);
       if (poolOpenTime > runTimestamp && !existing) {
         existingLiquidityPools.add(key);
@@ -618,29 +626,28 @@ const runListener = async () => {
     setInterval(loadSnipeList, SNIPE_LIST_REFRESH_INTERVAL);
   }
   if (AUTO_SAVE_LOG) {
-    setInterval( ()=>{
+    setInterval(() => {
       writeMapToFile(ledger, `log_buy_${runTimestamp}.txt`);
     }, 30000);
   }
   // Function to convert object to string with '|' separated variables
-function objectToString(obj:any) {
-  return Object.values(obj).join('|');
-}
-
-// Function to write map to file
-function writeMapToFile(map: Map<String, TokenEntry>, filename:any) {
-  const stream = fs.openSync(filename, 'w');
-  fs.writeSync(stream,"[")
-  for (const [key, value] of map) {
-      //console.log(value);
-      const line = JSON.stringify(value)+",\n";
-      //const line = `${key}|${objectToString(value)}\n`;
-      fs.writeSync(stream,line);
+  function objectToString(obj: any) {
+    return Object.values(obj).join('|');
   }
-  fs.writeSync(stream,"]")
-  fs.closeSync(stream);
-}
 
+  // Function to write map to file
+  function writeMapToFile(map: Map<String, TokenEntry>, filename: any) {
+    const stream = fs.openSync(filename, 'w');
+    fs.writeSync(stream, '[');
+    for (const [key, value] of map) {
+      //console.log(value);
+      const line = JSON.stringify(value) + ',\n';
+      //const line = `${key}|${objectToString(value)}\n`;
+      fs.writeSync(stream, line);
+    }
+    fs.writeSync(stream, ']');
+    fs.closeSync(stream);
+  }
 };
 
 runListener();
