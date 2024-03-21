@@ -385,15 +385,38 @@ async function buy(accountId: PublicKey, accountData: LiquidityStateV4, entryTok
     entryToken.timeSentBuyTx = Date.now();
     logger.info({ mint: accountData.baseMint, signature }, `Sent buy tx`);
     processingToken = true;
-    const confirmation = await solanaConnection.confirmTransaction(
+
+    const confirmation = await Promise.race([await solanaConnection.confirmTransaction(
       {
         signature,
         lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
         blockhash: latestBlockhash.blockhash,
       },
       commitment,
-    );
-    if (!confirmation.value.err) {
+    ), await solanaConnection.confirmTransaction(
+      {
+        signature,
+        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+        blockhash: latestBlockhash.blockhash,
+      },
+      commitment,
+    ),await solanaConnection.confirmTransaction(
+      {
+        signature,
+        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+        blockhash: latestBlockhash.blockhash,
+      },
+      commitment,
+    )]);
+    // const confirmation = await solanaConnection.confirmTransaction(
+    //   {
+    //     signature,
+    //     lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+    //     blockhash: latestBlockhash.blockhash,
+    //   },
+    //   commitment,
+    // );
+    if (!confirmation.value.err ) {
       logger.info(
         {
           mint: accountData.baseMint,
@@ -418,6 +441,8 @@ async function buy(accountId: PublicKey, accountData: LiquidityStateV4, entryTok
     entryToken.errorCode = -2;
   }
 }
+
+
 
 async function sell(accountId: PublicKey, mint: PublicKey, amount: BigNumberish): Promise<void> {
   let sold = false;
