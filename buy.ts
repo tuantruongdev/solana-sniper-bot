@@ -379,13 +379,17 @@ async function buy(accountId: PublicKey, accountData: LiquidityStateV4, entryTok
     const transaction = new VersionedTransaction(messageV0);
     transaction.sign([wallet, ...innerTransaction.signers]);
     entryToken.timeSendBuyTx = Date.now();
-    const signature = await Promise.race([await solanaConnection.sendRawTransaction(transaction.serialize(), {
+
+    const sig1 =  solanaConnection.sendRawTransaction(transaction.serialize(), {
       preflightCommitment: commitment,
-    }),await solanaConnection.sendRawTransaction(transaction.serialize(), {
+    });
+    const sig2 =  solanaConnection.sendRawTransaction(transaction.serialize(), {
       preflightCommitment: commitment,
-    }),await solanaConnection.sendRawTransaction(transaction.serialize(), {
+    });
+    const sig3 =  solanaConnection.sendRawTransaction(transaction.serialize(), {
       preflightCommitment: commitment,
-    })]);
+    });
+    const signature = await Promise.race([sig1,sig2,sig3]);
     // const signature = await solanaConnection.sendRawTransaction(transaction.serialize(), {
     //   preflightCommitment: commitment,
     // });
@@ -393,28 +397,32 @@ async function buy(accountId: PublicKey, accountData: LiquidityStateV4, entryTok
     logger.info({ mint: accountData.baseMint, signature }, `Sent buy tx`);
     processingToken = true;
 
-    const confirmation = await Promise.race([await solanaConnection.confirmTransaction(
+    const buyFunc1 =  solanaConnection.confirmTransaction(
       {
         signature,
         lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
         blockhash: latestBlockhash.blockhash,
       },
       commitment,
-    ), await solanaConnection.confirmTransaction(
+    )
+    const buyFunc2 =  solanaConnection.confirmTransaction(
       {
         signature,
         lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
         blockhash: latestBlockhash.blockhash,
       },
       commitment,
-    ),await solanaConnection.confirmTransaction(
+    )
+    const buyFunc3 =  solanaConnection.confirmTransaction(
       {
         signature,
         lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
         blockhash: latestBlockhash.blockhash,
       },
       commitment,
-    )]);
+    )
+    
+    const confirmation = await Promise.race([buyFunc1,buyFunc2,buyFunc3]);
     // const confirmation = await solanaConnection.confirmTransaction(
     //   {
     //     signature,
