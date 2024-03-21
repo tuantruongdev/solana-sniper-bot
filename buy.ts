@@ -70,8 +70,8 @@ export const logger = pino(
 const network = 'mainnet-beta';
 const RPC_ENDPOINT = retrieveEnvVariable('RPC_ENDPOINT', logger);
 const RPC_WEBSOCKET_ENDPOINT = retrieveEnvVariable('RPC_WEBSOCKET_ENDPOINT', logger);
-const RPC_ENDPOINT_ALT = retrieveEnvVariable('RPC_ENDPOINT', logger);
-const RPC_WEBSOCKET_ENDPOINT_ALT = retrieveEnvVariable('RPC_WEBSOCKET_ENDPOINT', logger);
+const RPC_ENDPOINT_ALT = retrieveEnvVariable('RPC_ENDPOINT_ALT', logger);
+const RPC_WEBSOCKET_ENDPOINT_ALT = retrieveEnvVariable('RPC_WEBSOCKET_ENDPOINT_ALT', logger);
 const LOG_LEVEL = retrieveEnvVariable('LOG_LEVEL', logger);
 
 const solanaConnection = new Connection(RPC_ENDPOINT, {
