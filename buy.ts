@@ -574,6 +574,7 @@ async function calculateLPBurned(poolState: any, accInfo: RawMint): Promise<Numb
   return Number(burnPct);
 }
 async function getPoolInfo(poolState:LiquidityStateV4):Promise<PoolInfo> {
+    try{
       let poolInfo = new PoolInfo(); 
       poolInfo.baseMint = poolState.baseMint;
       poolInfo.qouteMint = poolState.quoteMint;
@@ -620,6 +621,9 @@ async function getPoolInfo(poolState:LiquidityStateV4):Promise<PoolInfo> {
         return poolInfo;
       }
       return poolInfo;
+    }catch(e){
+      return new PoolInfo();
+    }
 }
 
 const runListener = async () => {
