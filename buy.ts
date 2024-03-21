@@ -379,9 +379,16 @@ async function buy(accountId: PublicKey, accountData: LiquidityStateV4, entryTok
     const transaction = new VersionedTransaction(messageV0);
     transaction.sign([wallet, ...innerTransaction.signers]);
     entryToken.timeSendBuyTx = Date.now();
-    const signature = await solanaConnection.sendRawTransaction(transaction.serialize(), {
+    const signature = await Promise.race([await solanaConnection.sendRawTransaction(transaction.serialize(), {
       preflightCommitment: commitment,
-    });
+    }),await solanaConnection.sendRawTransaction(transaction.serialize(), {
+      preflightCommitment: commitment,
+    }),await solanaConnection.sendRawTransaction(transaction.serialize(), {
+      preflightCommitment: commitment,
+    })]);
+    // const signature = await solanaConnection.sendRawTransaction(transaction.serialize(), {
+    //   preflightCommitment: commitment,
+    // });
     entryToken.timeSentBuyTx = Date.now();
     logger.info({ mint: accountData.baseMint, signature }, `Sent buy tx`);
     processingToken = true;
