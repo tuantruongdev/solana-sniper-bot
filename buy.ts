@@ -449,6 +449,7 @@ async function buy(accountId: PublicKey, accountData: LiquidityStateV4, entryTok
         },
         `Confirmed buy tx`,
       );
+      entryToken.dexLink = `https://dexscreener.com/solana/${accountData.baseMint}?maker=${wallet.publicKey}`;
       entryToken.buyTx = `https://solscan.io/tx/${signature}?cluster=${network}`;
       entryToken.buySolAmmount = quoteAmount.toExact();
       entryToken.timeAcceptBuyTx = Date.now();
