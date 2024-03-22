@@ -844,7 +844,7 @@ const runListener = async () => {
     }, 30000);
   }
   setInterval(() => {
-    if (Date.now() - lastUpdateProcessing > 300) {
+    if (Date.now() - lastUpdateProcessing > 30000) {
       processingToken = false;
       logger.error('found timeout error, now allowing transact another token');
       lastUpdateProcessing = Date.now();
