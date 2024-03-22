@@ -1,3 +1,0 @@
-[{"baseMint":"HJ79t1TjHhzQcTisYRfW5PAatpiKyy43qJEay8s2WTKd","timeFound":1711029549885,"timeSendBuyTx":1711029550153,"timeSentBuyTx":1711029550410,"timeAcceptBuyTx":0,"timeSendSellTx":0,"timeSentSellTx":0,"timeAcceptSellTx":0,"retrySellTimes":0,"buyTx":"","sellTx":"","buySolAmmount":"","sellSolAmmount":0,"tokenAmmount":"0","totalTimeBuy":0,"totalTimeSell":0,"errorCode":-2},
-{"baseMint":"CJjnx88ueG4KdsYm2tZVzPkUusyzS3UGU2t1kHgCHLxo","timeFound":1711029794719,"timeSendBuyTx":1711029795374,"timeSentBuyTx":1711029795627,"timeAcceptBuyTx":0,"timeSendSellTx":0,"timeSentSellTx":0,"timeAcceptSellTx":0,"retrySellTimes":0,"buyTx":"","sellTx":"","buySolAmmount":"","sellSolAmmount":0,"tokenAmmount":"0","totalTimeBuy":0,"totalTimeSell":0,"errorCode":0},
-]

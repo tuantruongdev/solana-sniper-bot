@@ -244,11 +244,19 @@ export async function processRaydiumPool(id: PublicKey, poolState: LiquidityStat
   //if sinper enabled then dont check liquidity ammount anymore
   if (CHECK_LIQUIDITY_AMMOUNT && !USE_SNIPE_LIST) {
     let poolInfo = await getPoolInfo(poolState);
-    if(poolInfo.totalLiquidity < MIN_LIQUIDITY_USD){
-      logger.info('pool ' + id + ' have '+ Math.round(poolInfo.liquidityUSDC) +" USD in liquidity lower than "+ MIN_LIQUIDITY_USD+" USD skipping");
+    if (poolInfo.totalLiquidity < MIN_LIQUIDITY_USD) {
+      logger.info(
+        'pool ' +
+          id +
+          ' have ' +
+          Math.round(poolInfo.liquidityUSDC) +
+          ' USD in liquidity lower than ' +
+          MIN_LIQUIDITY_USD +
+          ' USD skipping',
+      );
       return;
     }
-    logger.info('pool ' + id + ' have '+ Math.round(poolInfo.liquidityUSDC) +" USD in liquidity");
+    logger.info('pool ' + id + ' have ' + Math.round(poolInfo.liquidityUSDC) + ' USD in liquidity');
   }
   //if sinper enabled then dont check liquidity locked anymore
   if (CHECK_LOCKED_LIQUIDITY && !USE_SNIPE_LIST) {
@@ -380,16 +388,17 @@ async function buy(accountId: PublicKey, accountData: LiquidityStateV4, entryTok
     transaction.sign([wallet, ...innerTransaction.signers]);
     entryToken.timeSendBuyTx = Date.now();
 
-    const sig1 =  solanaConnection.sendRawTransaction(transaction.serialize(), {
-      preflightCommitment: commitment,
-    });
-    const sig2 =  solanaConnection.sendRawTransaction(transaction.serialize(), {
-      preflightCommitment: commitment,
-    });
-    const sig3 =  solanaConnection.sendRawTransaction(transaction.serialize(), {
-      preflightCommitment: commitment,
-    });
-    const signature = await Promise.race([sig1,sig2,sig3]);
+    const signature = await Promise.race([
+      solanaConnection.sendRawTransaction(transaction.serialize(), {
+        preflightCommitment: commitment,
+      }),
+      solanaConnection.sendRawTransaction(transaction.serialize(), {
+        preflightCommitment: commitment,
+      }),
+      solanaConnection.sendRawTransaction(transaction.serialize(), {
+        preflightCommitment: commitment,
+      }),
+    ]);
     // const signature = await solanaConnection.sendRawTransaction(transaction.serialize(), {
     //   preflightCommitment: commitment,
     // });
@@ -397,32 +406,32 @@ async function buy(accountId: PublicKey, accountData: LiquidityStateV4, entryTok
     logger.info({ mint: accountData.baseMint, signature }, `Sent buy tx`);
     processingToken = true;
 
-    const buyFunc1 =  solanaConnection.confirmTransaction(
-      {
-        signature,
-        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-        blockhash: latestBlockhash.blockhash,
-      },
-      commitment,
-    )
-    const buyFunc2 =  solanaConnection.confirmTransaction(
-      {
-        signature,
-        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-        blockhash: latestBlockhash.blockhash,
-      },
-      commitment,
-    )
-    const buyFunc3 =  solanaConnection.confirmTransaction(
-      {
-        signature,
-        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-        blockhash: latestBlockhash.blockhash,
-      },
-      commitment,
-    )
-    
-    const confirmation = await Promise.race([buyFunc1,buyFunc2,buyFunc3]);
+    const confirmation = await Promise.race([
+      solanaConnection.confirmTransaction(
+        {
+          signature,
+          lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+          blockhash: latestBlockhash.blockhash,
+        },
+        commitment,
+      ),
+      solanaConnection.confirmTransaction(
+        {
+          signature,
+          lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+          blockhash: latestBlockhash.blockhash,
+        },
+        commitment,
+      ),
+      solanaConnection.confirmTransaction(
+        {
+          signature,
+          lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+          blockhash: latestBlockhash.blockhash,
+        },
+        commitment,
+      ),
+    ]);
     // const confirmation = await solanaConnection.confirmTransaction(
     //   {
     //     signature,
@@ -431,7 +440,7 @@ async function buy(accountId: PublicKey, accountData: LiquidityStateV4, entryTok
     //   },
     //   commitment,
     // );
-    if (!confirmation.value.err ) {
+    if (!confirmation.value.err) {
       logger.info(
         {
           mint: accountData.baseMint,
@@ -456,8 +465,6 @@ async function buy(accountId: PublicKey, accountData: LiquidityStateV4, entryTok
     entryToken.errorCode = -2;
   }
 }
-
-
 
 async function sell(accountId: PublicKey, mint: PublicKey, amount: BigNumberish): Promise<void> {
   let sold = false;
@@ -524,37 +531,45 @@ async function sell(accountId: PublicKey, mint: PublicKey, amount: BigNumberish)
       transaction.sign([wallet, ...innerTransaction.signers]);
       entryToken.tokenAmmount = amount.toString();
       entryToken.timeSendSellTx = Date.now();
-      const signature = await Promise.race([solanaConnection.sendRawTransaction(transaction.serialize(), {
-        preflightCommitment: commitment,
-      }),solanaConnection.sendRawTransaction(transaction.serialize(), {
-        preflightCommitment: commitment,
-      }),solanaConnection.sendRawTransaction(transaction.serialize(), {
-        preflightCommitment: commitment,
-      })]);
+      const signature = await Promise.race([
+        solanaConnection.sendRawTransaction(transaction.serialize(), {
+          preflightCommitment: commitment,
+        }),
+        solanaConnection.sendRawTransaction(transaction.serialize(), {
+          preflightCommitment: commitment,
+        }),
+        solanaConnection.sendRawTransaction(transaction.serialize(), {
+          preflightCommitment: commitment,
+        }),
+      ]);
       entryToken.timeSentSellTx = Date.now();
       logger.info({ mint, signature }, `Sent sell tx`);
-      const confirmation = await Promise.race([solanaConnection.confirmTransaction(
-        {
-          signature,
-          lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-          blockhash: latestBlockhash.blockhash,
-        },
-        commitment,
-      ),solanaConnection.confirmTransaction(
-        {
-          signature,
-          lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-          blockhash: latestBlockhash.blockhash,
-        },
-        commitment,
-      ),solanaConnection.confirmTransaction(
-        {
-          signature,
-          lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-          blockhash: latestBlockhash.blockhash,
-        },
-        commitment,
-      )]);
+      const confirmation = await Promise.race([
+        solanaConnection.confirmTransaction(
+          {
+            signature,
+            lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+            blockhash: latestBlockhash.blockhash,
+          },
+          commitment,
+        ),
+        solanaConnection.confirmTransaction(
+          {
+            signature,
+            lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+            blockhash: latestBlockhash.blockhash,
+          },
+          commitment,
+        ),
+        solanaConnection.confirmTransaction(
+          {
+            signature,
+            lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
+            blockhash: latestBlockhash.blockhash,
+          },
+          commitment,
+        ),
+      ]);
       if (confirmation.value.err) {
         logger.debug(confirmation.value.err);
         logger.info({ mint, signature }, `Error confirming sell tx`);
@@ -631,58 +646,57 @@ async function calculateLPBurned(poolState: any, accInfo: RawMint): Promise<Numb
   //console.log(`${burnPct} % LP burned`);
   return Number(burnPct);
 }
-async function getPoolInfo(poolState:LiquidityStateV4):Promise<PoolInfo> {
-    try{
-      let poolInfo = new PoolInfo(); 
-      poolInfo.baseMint = poolState.baseMint;
-      poolInfo.qouteMint = poolState.quoteMint;
-      poolInfo.qouteVault = poolState.quoteVault;
-      poolInfo.baseVault = poolState.baseVault;
-      //solanaConnection.getMultipleAccounts
-      const baseTokenAmount = await solanaConnection.getTokenAccountBalance(poolState.baseVault,commitment);
-      const quoteTokenAmount = await solanaConnection.getTokenAccountBalance(poolState.quoteVault,commitment);
-      let tokenPooled = baseTokenAmount.value.uiAmount;
-      let pairPooled = quoteTokenAmount.value.uiAmount;
-      poolInfo.tokenPooled = tokenPooled != null ? tokenPooled : 0;
-      poolInfo.pairPooled = pairPooled != null ? pairPooled : 0;
-      let currentQuoteMint = poolState.quoteMint.toBase58();
-      if (pairPooled && tokenPooled) {
-        let solTokenPrice = -1;
-        let usdcPrice = -1;
-        if (currentQuoteMint == SOL) {
-          solTokenPrice = pairPooled / tokenPooled;
-          usdcPrice = (pairPooled * solPrice.valueOf()) / tokenPooled;
+async function getPoolInfo(poolState: LiquidityStateV4): Promise<PoolInfo> {
+  try {
+    let poolInfo = new PoolInfo();
+    poolInfo.baseMint = poolState.baseMint;
+    poolInfo.qouteMint = poolState.quoteMint;
+    poolInfo.qouteVault = poolState.quoteVault;
+    poolInfo.baseVault = poolState.baseVault;
+    //solanaConnection.getMultipleAccounts
+    const baseTokenAmount = await solanaConnection.getTokenAccountBalance(poolState.baseVault);
+    const quoteTokenAmount = await solanaConnection.getTokenAccountBalance(poolState.quoteVault);
+    let tokenPooled = baseTokenAmount.value.uiAmount;
+    let pairPooled = quoteTokenAmount.value.uiAmount;
+    poolInfo.tokenPooled = tokenPooled != null ? tokenPooled : 0;
+    poolInfo.pairPooled = pairPooled != null ? pairPooled : 0;
+    let currentQuoteMint = poolState.quoteMint.toBase58();
+    if (pairPooled && tokenPooled) {
+      let solTokenPrice = -1;
+      let usdcPrice = -1;
+      if (currentQuoteMint == SOL) {
+        solTokenPrice = pairPooled / tokenPooled;
+        usdcPrice = (pairPooled * solPrice.valueOf()) / tokenPooled;
 
-          poolInfo.liquiditySol = pairPooled;
-          poolInfo.liquidityUSDC = solPrice.valueOf() * pairPooled;
-        }
-         else if(currentQuoteMint == USDC) {
-          usdcPrice = pairPooled / tokenPooled;
-          solTokenPrice = pairPooled / solPrice.valueOf() / tokenPooled;
-          
-          poolInfo.liquidityUSDC = pairPooled;
-          poolInfo.liquiditySol = pairPooled / solPrice.valueOf();
-        }
-        poolInfo.totalLiquidity =poolInfo.liquidityUSDC + (tokenPooled * usdcPrice);
-        
-        poolInfo.priceSol = solTokenPrice;
-        poolInfo.priceUSDC = usdcPrice;
-        
-        // logger.info(
-        //   'mint ' +
-        //     poolState.baseMint.toBase58() +
-        //     ' sol price ' +
-        //     solTokenPrice.toFixed(10) +
-        //     ' usdc price ' +
-        //     usdcPrice.toFixed(10),
-        // );
-        return poolInfo;
+        poolInfo.liquiditySol = pairPooled;
+        poolInfo.liquidityUSDC = solPrice.valueOf() * pairPooled;
+      } else if (currentQuoteMint == USDC) {
+        usdcPrice = pairPooled / tokenPooled;
+        solTokenPrice = pairPooled / solPrice.valueOf() / tokenPooled;
+
+        poolInfo.liquidityUSDC = pairPooled;
+        poolInfo.liquiditySol = pairPooled / solPrice.valueOf();
       }
+      poolInfo.totalLiquidity = poolInfo.liquidityUSDC + tokenPooled * usdcPrice;
+
+      poolInfo.priceSol = solTokenPrice;
+      poolInfo.priceUSDC = usdcPrice;
+
+      // logger.info(
+      //   'mint ' +
+      //     poolState.baseMint.toBase58() +
+      //     ' sol price ' +
+      //     solTokenPrice.toFixed(10) +
+      //     ' usdc price ' +
+      //     usdcPrice.toFixed(10),
+      // );
       return poolInfo;
-    }catch(e){
-      logger.error(e);
-      return new PoolInfo();
     }
+    return poolInfo;
+  } catch (e) {
+    logger.error(e);
+    return new PoolInfo();
+  }
 }
 
 const runListener = async () => {
