@@ -102,6 +102,7 @@ let quoteTokenAssociatedAddress: PublicKey;
 let quoteAmount: TokenAmount;
 let commitment: Commitment = retrieveEnvVariable('COMMITMENT_LEVEL', logger) as Commitment;
 let processingToken: Boolean = false;
+let lastUpdateProcessing: number = 0; //this keep track if we stucking in one mint too long
 let solPrice: Number = 0;
 const SOL = 'So11111111111111111111111111111111111111112';
 const USDC = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
@@ -115,6 +116,8 @@ const MAX_SELL_RETRIES = Number(retrieveEnvVariable('MAX_SELL_RETRIES', logger))
 const AUTO_SELL_DELAY = Number(retrieveEnvVariable('AUTO_SELL_DELAY', logger));
 const RETRY_GET_ACCOUNT_INFO = Number(retrieveEnvVariable('RETRY_GET_ACCOUNT_INFO', logger));
 const DELAY_RETRY_GETACCOUNT_INFO = Number(retrieveEnvVariable('DELAY_RETRY_GETACCOUNT_INFO', logger));
+const RETRY_GET_LIQUIDITY_INFO = Number(retrieveEnvVariable('RETRY_GET_LIQUIDITY_INFO', logger));
+const DELAY_RETRY_GET_LIQUIDITY_INFO = Number(retrieveEnvVariable('DELAY_RETRY_GET_LIQUIDITY_INFO', logger));
 const LIQUIDITY_SUPPLY_PERCENTAGE = Number(retrieveEnvVariable('LIQUIDITY_SUPPLY_PERCENTAGE', logger));
 const CHECK_LOCKED_LIQUIDITY = retrieveEnvVariable('CHECK_LOCKED_LIQUIDITY', logger) === 'true';
 const MIN_LIQUIDITY_USD = Number(retrieveEnvVariable('MIN_LIQUIDITY_USD', logger));
@@ -243,7 +246,7 @@ export async function processRaydiumPool(id: PublicKey, poolState: LiquidityStat
 
   //if sinper enabled then dont check liquidity ammount anymore
   if (CHECK_LIQUIDITY_AMMOUNT && !USE_SNIPE_LIST) {
-    let poolInfo = await getPoolInfo(poolState);
+    let poolInfo = await getMinimalPoolInfo(poolState, RETRY_GET_LIQUIDITY_INFO);
     if (poolInfo.totalLiquidity < MIN_LIQUIDITY_USD) {
       logger.info(
         'pool ' +
@@ -405,7 +408,7 @@ async function buy(accountId: PublicKey, accountData: LiquidityStateV4, entryTok
     entryToken.timeSentBuyTx = Date.now();
     logger.info({ mint: accountData.baseMint, signature }, `Sent buy tx`);
     processingToken = true;
-
+    lastUpdateProcessing = Date.now();
     const confirmation = await Promise.race([
       solanaConnection.confirmTransaction(
         {
@@ -657,6 +660,7 @@ async function getPoolInfo(poolState: LiquidityStateV4): Promise<PoolInfo> {
     //solanaConnection.getMultipleAccounts
     const baseTokenAmount = await solanaConnection.getTokenAccountBalance(poolState.baseVault);
     const quoteTokenAmount = await solanaConnection.getTokenAccountBalance(poolState.quoteVault);
+    //if(base)
     let tokenPooled = baseTokenAmount.value.uiAmount;
     let pairPooled = quoteTokenAmount.value.uiAmount;
     poolInfo.tokenPooled = tokenPooled != null ? tokenPooled : 0;
@@ -697,6 +701,44 @@ async function getPoolInfo(poolState: LiquidityStateV4): Promise<PoolInfo> {
   } catch (e) {
     logger.error(e);
     return new PoolInfo();
+  }
+}
+//avoid calling getTokenAccountBalance by only call it one on qoute token.
+async function getMinimalPoolInfo(poolState: LiquidityStateV4, retry: number): Promise<PoolInfo> {
+  try {
+    let poolInfo = new PoolInfo();
+    poolInfo.baseMint = poolState.baseMint;
+    poolInfo.qouteMint = poolState.quoteMint;
+    poolInfo.qouteVault = poolState.quoteVault;
+    poolInfo.baseVault = poolState.baseVault;
+    const quoteTokenAmount = await solanaConnection.getTokenAccountBalance(poolState.quoteVault);
+    if (quoteTokenAmount.value.uiAmount == null && retry > 0) {
+      await new Promise((resolve) => setTimeout(resolve, DELAY_RETRY_GET_LIQUIDITY_INFO));
+      return await getMinimalPoolInfo(poolState, --retry);
+    }
+    let pairPooled = quoteTokenAmount.value.uiAmount;
+
+    poolInfo.pairPooled = pairPooled != null ? pairPooled : 0;
+    let currentQuoteMint = poolState.quoteMint.toBase58();
+    if (pairPooled) {
+      if (currentQuoteMint == SOL) {
+        poolInfo.liquiditySol = pairPooled;
+        poolInfo.liquidityUSDC = solPrice.valueOf() * pairPooled;
+      } else if (currentQuoteMint == USDC) {
+        poolInfo.liquidityUSDC = pairPooled;
+        poolInfo.liquiditySol = pairPooled / solPrice.valueOf();
+      }
+      return poolInfo;
+    }
+    return poolInfo;
+  } catch (e) {
+    logger.error(e);
+    if (retry > 0) {
+      await new Promise((resolve) => setTimeout(resolve, DELAY_RETRY_GET_LIQUIDITY_INFO));
+      return await getMinimalPoolInfo(poolState, --retry);
+    } else {
+      return new PoolInfo();
+    }
   }
 }
 
@@ -801,6 +843,12 @@ const runListener = async () => {
       writeMapToFile(ledger, `log_buy_${runTimestamp}.txt`);
     }, 30000);
   }
+  setInterval(() => {
+    if (Date.now() - lastUpdateProcessing > 300) {
+      processingToken = false;
+      logger.error('found timeout error, now allowing transact another token');
+    }
+  }, 10000);
   // Function to convert object to string with '|' separated variables
   function objectToString(obj: any) {
     return Object.values(obj).join('|');
