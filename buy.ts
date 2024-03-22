@@ -247,7 +247,7 @@ export async function processRaydiumPool(id: PublicKey, poolState: LiquidityStat
   //if sinper enabled then dont check liquidity ammount anymore
   if (CHECK_LIQUIDITY_AMMOUNT && !USE_SNIPE_LIST) {
     let poolInfo = await getMinimalPoolInfo(poolState, RETRY_GET_LIQUIDITY_INFO);
-    if (poolInfo.totalLiquidity < MIN_LIQUIDITY_USD) {
+    if (poolInfo.liquidityUSDC < MIN_LIQUIDITY_USD) {
       logger.info(
         'pool ' +
           id +
@@ -847,6 +847,7 @@ const runListener = async () => {
     if (Date.now() - lastUpdateProcessing > 300) {
       processingToken = false;
       logger.error('found timeout error, now allowing transact another token');
+      lastUpdateProcessing = Date.now();
     }
   }, 10000);
   // Function to convert object to string with '|' separated variables
